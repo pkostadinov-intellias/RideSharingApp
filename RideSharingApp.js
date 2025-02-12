@@ -22,7 +22,7 @@ class RideSharingApp {
     this.notificator.subscribe(driver);
   }
 
-  requestRide(user, pickup, dropoff) {
+  async requestRide(user, pickup, dropoff) {
     console.log(`\n🚕 Requesting Ride for ${user.name}...`);
     console.log("=".repeat(40));
 
@@ -38,8 +38,12 @@ class RideSharingApp {
       return;
     }
 
-    const driver =
-      driversOnDuty[Math.floor(Math.random() * driversOnDuty.length)];
+    this.notificator.notify(
+      [user],
+      "🔍 Searching for the best available driver..."
+    );
+
+    const driver = await this.simulateDriverSearch(driversOnDuty);
 
     const cost = (Math.random() * (20 - 5) + 5).toFixed(2);
 
@@ -65,6 +69,14 @@ class RideSharingApp {
     }
 
     return ride;
+  }
+
+  simulateDriverSearch(drivers) {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(drivers[Math.floor(Math.random() * drivers.length)]);
+      }, 3000);
+    });
   }
 
   async startRide(ride) {
