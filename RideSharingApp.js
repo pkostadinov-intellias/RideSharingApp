@@ -227,8 +227,8 @@ class Driver {
 
 class VipDriver extends Driver {
   constructor(name, onDuty, balance) {
-    super(name, onDuty, balance); // Calls `Driver` constructor
-    this.taxiCommission = 2.0 / 100; // Overrides the parent property
+    super(name, onDuty, balance);
+    this.taxiCommission = 2.0 / 100;
     this.vipPriority = true;
   }
 }
