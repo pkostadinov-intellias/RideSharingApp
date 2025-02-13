@@ -122,7 +122,7 @@ class RideSharingApp {
         [ride.user],
         `❌ Payment failed: ${error.message}`
       );
-      ride.status("failed");
+      ride.status = "failed";
       console.log("❌ Payment Failed! " + error.message);
     }
   }
@@ -226,29 +226,13 @@ class Driver {
 }
 
 class VipDriver extends Driver {
-  #balance;
-
   constructor(name, onDuty, balance) {
-    super(name, onDuty, balance);
-    this.#balance = balance;
-    this.taxiCommission = 2.0 / 100; // Reduced commission (2%)
+    super(name, onDuty, balance); // Calls `Driver` constructor
+    this.taxiCommission = 2.0 / 100; // Overrides the parent property
     this.vipPriority = true;
   }
-
-  getBalance() {
-    return this.#balance;
-  }
-
-  addBalance(amount) {
-    const commission = amount * this.taxiCommission;
-    this.#balance += amount - commission;
-    console.log(
-      `⭐ ${this.name} (VIP Driver) received $${(amount - commission).toFixed(
-        2
-      )}. (${commission.toFixed(2)}$ went to the taxi company as commission.)`
-    );
-  }
 }
+
 class RoleFactory {
   static createRole(role, name, paymentMethodOrOnDuty, balance) {
     switch (role.toLowerCase()) {
