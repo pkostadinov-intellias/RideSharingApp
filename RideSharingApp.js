@@ -12,12 +12,14 @@ class RideSharingApp {
     RideSharingApp.instance = this;
   }
 
-  addUser(user) {
+  addUser(role, name, paymentMethod, balance) {
+    const user = RoleFactory.createRole(role, name, paymentMethod, balance);
     this.users.push(user);
     this.notificator.subscribe(user);
   }
 
-  addDriver(driver) {
+  addDriver(role, name, onDuty, balance) {
+    const driver = RoleFactory.createRole(role, name, onDuty, balance);
     this.drivers.push(driver);
     this.notificator.subscribe(driver);
   }
@@ -47,7 +49,7 @@ class RideSharingApp {
 
     const cost = (Math.random() * (20 - 5) + 5).toFixed(2);
 
-    const ride = RideFactory.createRide(user, driver, pickup, dropoff, cost);
+    const ride = new Ride(user, driver, pickup, dropoff, cost);
     this.rides.push(ride);
 
     console.log(`🚖 Driver was found → : ${driver.name}`);
@@ -247,6 +249,22 @@ class VipDriver extends Driver {
     );
   }
 }
+class RoleFactory {
+  static createRole(role, name, paymentMethodOrOnDuty, balance) {
+    switch (role.toLowerCase()) {
+      case "user":
+        return new User(name, paymentMethodOrOnDuty, balance);
+      case "premium_user":
+        return new PremiumUser(name, paymentMethodOrOnDuty, balance);
+      case "driver":
+        return new Driver(name, paymentMethodOrOnDuty, balance);
+      case "vip_driver":
+        return new VipDriver(name, paymentMethodOrOnDuty, balance);
+      default:
+        throw new Error(`❌ Invalid role: ${role}`);
+    }
+  }
+}
 
 class Ride {
   constructor(user, driver, pickup, dropoff, cost) {
@@ -256,12 +274,6 @@ class Ride {
     this.dropoff = dropoff;
     this.status = "pending";
     this.cost = cost;
-  }
-}
-
-class RideFactory {
-  static createRide(user, driver, pickup, dropoff, cost) {
-    return new Ride(user, driver, pickup, dropoff, cost);
   }
 }
 
@@ -283,25 +295,42 @@ class Notificator {
   }
 }
 
-async function testPremiumRide() {
-  console.log("\n=== TEST: Premium User Ride (Discount Applied) ===");
-  // Create a premium user and a regular driver.
-  const premiumUser = new PremiumUser("Bob", "PayPal", 50);
-  const driver = new Driver("David", true, 100);
-
-  const rideApp = new RideSharingApp();
-  rideApp.addUser(premiumUser);
-  rideApp.addDriver(driver);
-
-  // Request a ride.
-  const ride = rideApp.requestRide(premiumUser, "University", "Library");
-  await new Promise((resolve) => setTimeout(resolve, 3500));
-
-  console.log(`Final Status: ${ride.status}`);
-  console.log(
-    `Bob's Final Balance (After Discount): $${premiumUser.getBalance()}`
-  );
-  console.log(`David's Final Balance: $${driver.getBalance()}`);
+async function delay(seconds) {
+  return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
 }
 
-testPremiumRide();
+async function testRideFlow() {
+  console.log("\n=== Running All Ride Tests ===");
+
+  const rideApp = new RideSharingApp();
+  rideApp.addUser("user", "Alice", "Credit Card", 50);
+  rideApp.addUser("premium_user", "Bob", "PayPal", 60);
+  rideApp.addDriver("driver", "Charlie", true, 100);
+  rideApp.addDriver("vip_driver", "Sophia", true, 120);
+
+  console.log("\n🔄 Requesting a normal ride...");
+  await rideApp.requestRide(rideApp.users[0], "Mall", "Park");
+  await delay(4);
+
+  console.log("\n🔄 Requesting a premium ride with discount...");
+  await rideApp.requestRide(rideApp.users[1], "University", "Library");
+  await delay(4);
+
+  console.log("\n🔄 Testing VIP driver priority...");
+  await rideApp.requestRide(rideApp.users[0], "Downtown", "Airport");
+  await delay(4);
+
+  console.log("\n🔄 Testing ride decline scenario...");
+  rideApp.drivers[0].handleRideRequest = () => false;
+  await rideApp.requestRide(rideApp.users[0], "Cinema", "Hotel");
+  await delay(4);
+
+  console.log("\n🔄 Testing insufficient funds...");
+  rideApp.addUser("user", "Mike", "Bank Transfer", 5);
+  await rideApp.requestRide(rideApp.users[2], "Beach", "Museum");
+  await delay(4);
+
+  console.log("\n✅ All tests completed!");
+}
+
+testRideFlow();
