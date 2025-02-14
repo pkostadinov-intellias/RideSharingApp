@@ -28,6 +28,18 @@ class RideSharingApp {
     console.log(`\n🚕 Requesting Ride for ${user.name}...`);
     console.log("=".repeat(40));
 
+    if (
+      !pickup ||
+      typeof pickup !== "object" ||
+      typeof pickup.name !== "string" ||
+      typeof pickup.coordinates !== "number"
+    ) {
+      console.log(
+        "❌ Invalid pickup location. Must be an object with a name and numeric coordinates."
+      );
+      return;
+    }
+
     if (this.drivers.length === 0) {
       console.log("❌ No available drivers.");
       return;
@@ -42,10 +54,13 @@ class RideSharingApp {
 
     this.notificator.notify(
       [user],
-      "🔍 Searching for the best available driver..."
+      `🔍 Searching for the best available driver near ${pickup.name}...`
     );
 
-    const driver = await this.simulateDriverSearch(driversOnDuty);
+    const driver = await this.simulateDriverSearch(
+      driversOnDuty,
+      pickup.coordinates
+    );
 
     const cost = (Math.random() * (20 - 5) + 5).toFixed(2);
 
@@ -53,13 +68,14 @@ class RideSharingApp {
     this.rides.push(ride);
 
     console.log(`🚖 Driver was found → : ${driver.name}`);
-    console.log(`📍 Pickup: ${pickup}  →  📍 Dropoff: ${dropoff}`);
+    console.log(`📍 Pickup: ${pickup.name}`);
+    console.log(`📍 Dropoff: ${dropoff}`);
     console.log(`💰 Estimated Cost: $${cost}`);
     console.log("-".repeat(40));
 
     this.notificator.notify(
       [user, driver],
-      `🚕 New ride created: From ${pickup} to ${dropoff}. Cost: $${cost}`
+      `🚕 New ride created: From ${pickup.name} to ${dropoff}. Cost: $${cost}`
     );
 
     if (driver.handleRideRequest(ride)) {
@@ -73,10 +89,29 @@ class RideSharingApp {
     return ride;
   }
 
-  simulateDriverSearch(drivers) {
+  simulateDriverSearch(drivers, pickup) {
     return new Promise((resolve) => {
       setTimeout(() => {
-        resolve(drivers[Math.floor(Math.random() * drivers.length)]);
+        const vipDrivers = drivers.filter(
+          (driver) => driver instanceof VipDriver
+        );
+        const regularDrivers = drivers.filter(
+          (driver) => !(driver instanceof VipDriver)
+        );
+
+        vipDrivers.sort(
+          (a, b) =>
+            Math.abs(a.waitingSpot - pickup) - Math.abs(b.waitingSpot - pickup)
+        );
+        regularDrivers.sort(
+          (a, b) =>
+            Math.abs(a.waitingSpot - pickup) - Math.abs(b.waitingSpot - pickup)
+        );
+
+        const closestDriver =
+          vipDrivers.length > 0 ? vipDrivers[0] : regularDrivers[0];
+
+        resolve(closestDriver);
       }, 3000);
     });
   }
@@ -87,7 +122,7 @@ class RideSharingApp {
 
     this.notificator.notify(
       [ride.user, ride.driver],
-      `🚗 Ride from ${ride.pickup} to ${ride.dropoff} has started!`
+      `🚗 Ride from ${ride.pickup.name} to ${ride.dropoff} has started!`
     );
 
     ride.status = "ongoing";
@@ -110,7 +145,7 @@ class RideSharingApp {
 
     this.notificator.notify(
       [ride.user, ride.driver],
-      `✅ Ride from ${ride.pickup} to ${ride.dropoff} is complete!`
+      `✅ Ride from ${ride.pickup.name} to ${ride.dropoff} is complete!`
     );
 
     try {
@@ -162,7 +197,7 @@ class PremiumUser extends User {
   constructor(name, paymentMethod, balance) {
     super(name, paymentMethod, balance);
     this.isPremium = true;
-    this.discountRate = 5 / 100; // 5% discount
+    this.discountRate = 5 / 100;
   }
 
   deductBalance(amount) {
@@ -186,7 +221,8 @@ class Driver {
     this.name = name;
     this.onDuty = onDuty;
     this.#balance = balance;
-    this.taxiCommission = 5 / 100; // 5% commission
+    this.taxiCommission = 5 / 100;
+    this.waitingSpot = Math.floor(Math.random() * 101);
   }
 
   update(message) {
@@ -211,13 +247,13 @@ class Driver {
     const acceptRide = Math.random() > 0.3;
     if (acceptRide) {
       console.log(
-        `✅ ${this.name} accepted the ride: ${ride.pickup} → ${ride.dropoff}.`
+        `✅ ${this.name} accepted the ride: ${ride.pickup.name} → ${ride.dropoff}.`
       );
       ride.status = "accepted";
       return true;
     } else {
       console.log(
-        `❌ ${this.name} declined the ride: ${ride.pickup} → ${ride.dropoff}.`
+        `❌ ${this.name} declined the ride: ${ride.pickup.name} → ${ride.dropoff}.`
       );
       ride.status = "declined";
       return false;
@@ -283,38 +319,125 @@ async function delay(seconds) {
   return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
 }
 
-async function testRideFlow() {
-  console.log("\n=== Running All Ride Tests ===");
+async function testClosestDriverSelection() {
+  console.log("\n=== TEST: Closest Driver Selection ===");
 
   const rideApp = new RideSharingApp();
   rideApp.addUser("user", "Alice", "Credit Card", 50);
-  rideApp.addUser("premium_user", "Bob", "PayPal", 60);
-  rideApp.addDriver("driver", "Charlie", true, 100);
-  rideApp.addDriver("vip_driver", "Sophia", true, 120);
 
-  console.log("\n🔄 Requesting a normal ride...");
-  await rideApp.requestRide(rideApp.users[0], "Mall", "Park");
+  rideApp.addDriver("driver", "Charlie", true, 100); // Random location
+  rideApp.addDriver("driver", "David", true, 100); // Random location
+  rideApp.addDriver("driver", "Sophia", true, 100); // Random location
+
+  const pickup = { name: "Mall", coordinates: 50 };
+
+  await rideApp.requestRide(rideApp.users[0], pickup, "Park");
   await delay(4);
+}
 
-  console.log("\n🔄 Requesting a premium ride with discount...");
-  await rideApp.requestRide(rideApp.users[1], "University", "Library");
+async function testInvalidPickupInput() {
+  console.log("\n=== TEST: Invalid Pickup Input ===");
+
+  const rideApp = new RideSharingApp();
+  rideApp.addUser("user", "Bob", "PayPal", 60);
+
+  await rideApp.requestRide(rideApp.users[0], "Mall", "Library"); // ❌ Should fail (string instead of object)
+  await rideApp.requestRide(rideApp.users[0], { name: "Mall" }, "Library"); // ❌ Should fail (missing coordinates)
+  await rideApp.requestRide(rideApp.users[0], { coordinates: 20 }, "Library"); // ❌ Should fail (missing name)
   await delay(4);
+}
 
-  console.log("\n🔄 Testing VIP driver priority...");
-  await rideApp.requestRide(rideApp.users[0], "Downtown", "Airport");
+async function testAllDriversDeclining() {
+  console.log("\n=== TEST: All Drivers Declining ===");
+
+  const rideApp = new RideSharingApp();
+  rideApp.addUser("user", "Charlie", "Debit Card", 80);
+  rideApp.addDriver("driver", "Driver 1", true, 100);
+  rideApp.addDriver("driver", "Driver 2", true, 100);
+
+  // Force all drivers to decline the ride
+  rideApp.drivers.forEach((driver) => (driver.handleRideRequest = () => false));
+
+  const pickup = { name: "Downtown", coordinates: 30 };
+  await rideApp.requestRide(rideApp.users[0], pickup, "Airport");
   await delay(4);
+}
 
-  console.log("\n🔄 Testing ride decline scenario...");
-  rideApp.drivers[0].handleRideRequest = () => false;
-  await rideApp.requestRide(rideApp.users[0], "Cinema", "Hotel");
+async function testNoDriversAvailable() {
+  console.log("\n=== TEST: No Drivers Available ===");
+
+  const rideApp = new RideSharingApp();
+  rideApp.addUser("user", "Charlie", "Debit Card", 100);
+
+  const pickup = { name: "Museum", coordinates: 10 };
+  await rideApp.requestRide(rideApp.users[0], pickup, "Museum"); // ❌ No drivers exist
   await delay(4);
+}
 
-  console.log("\n🔄 Testing insufficient funds...");
-  rideApp.addUser("user", "Mike", "Bank Transfer", 5);
-  await rideApp.requestRide(rideApp.users[2], "Beach", "Museum");
+async function testNoOnDutyDrivers() {
+  console.log("\n=== TEST: No On-Duty Drivers ===");
+
+  const rideApp = new RideSharingApp();
+  rideApp.addUser("user", "Alice", "Credit Card", 50);
+  rideApp.addDriver("driver", "Charlie", false, 100);
+  rideApp.addDriver("driver", "David", false, 90);
+
+  const pickup = { name: "Cinema", coordinates: 40 };
+  await rideApp.requestRide(rideApp.users[0], pickup, "Cinema"); // ❌ No on-duty drivers
   await delay(4);
+}
 
+async function testVipDriverPriority() {
+  console.log("\n=== TEST: VIP Driver Priority ===");
+
+  const rideApp = new RideSharingApp();
+  rideApp.addUser("user", "Bob", "PayPal", 75);
+
+  rideApp.addDriver("driver", "Regular Driver", true, 100);
+  rideApp.addDriver("vip_driver", "VIP Driver", true, 100); // Should be prioritized
+  rideApp.addDriver("driver", "Another Driver", true, 100);
+
+  const pickup = { name: "Stadium", coordinates: 45 };
+  await rideApp.requestRide(rideApp.users[0], pickup, "Concert Hall");
+  await delay(4);
+}
+
+async function testPremiumUserDiscount() {
+  console.log("\n=== TEST: Premium User Discount Applied ===");
+
+  const rideApp = new RideSharingApp();
+  rideApp.addUser("premium_user", "Alice", "Credit Card", 50); // Premium user with $50 balance
+  rideApp.addDriver("driver", "Charlie", true, 100); // Regular driver
+
+  const pickup = { name: "Shopping Mall", coordinates: 35 };
+
+  const ride = await rideApp.requestRide(rideApp.users[0], pickup, "Downtown");
+
+  if (ride) {
+    const originalCost = ride.cost / (1 - 0.05); // Reverse the discount (5%)
+    console.log(
+      `💰 Original Cost before discount: $${originalCost.toFixed(2)}`
+    );
+    console.log(`💳 Discounted Cost for Premium User: $${ride.cost}`);
+    console.log(
+      `💵 Alice's Remaining Balance: $${rideApp.users[0].getBalance()}`
+    );
+  } else {
+    console.log("❌ Ride request failed.");
+  }
+
+  await delay(4);
+}
+
+async function runAllTests() {
+  await testClosestDriverSelection();
+  await testInvalidPickupInput();
+  await testAllDriversDeclining();
+  await testNoDriversAvailable();
+  await testNoOnDutyDrivers();
+  await testVipDriverPriority();
+  await testPremiumUserDiscount();
   console.log("\n✅ All tests completed!");
 }
 
-testRideFlow();
+runAllTests();
